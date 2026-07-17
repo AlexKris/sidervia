@@ -1,0 +1,51 @@
+# Go
+/sidervia
+*.test
+*.prof
+coverage.out
+coverage.html
+
+# Frontend
+web/node_modules/
+web/dist/
+!web/dist/
+web/dist/*
+!web/dist/.gitkeep
+web/.vite/
+web/coverage/
+/.pnpm-store/
+
+# Build and release output
+/bin/
+/build/
+/dist/
+/artifacts/
+
+# Runtime data and secrets
+/data/
+/backup/
+/secrets/
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+*.key
+*.pem
+*.p12
+*.pfx
+.env
+.env.*
+!.env.example
+
+# Logs and temporary files
+*.log
+tmp/
+temp/
+
+# Editors and operating systems
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*.swo

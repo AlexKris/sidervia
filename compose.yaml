@@ -1,0 +1,41 @@
+services:
+  sidervia:
+    image: "${SIDERVIA_IMAGE:?Set SIDERVIA_IMAGE to a release image pinned by digest}"
+    restart: unless-stopped
+    user: "65532:65532"
+    read_only: true
+    ports:
+      - "127.0.0.1:8080:8080"
+    environment:
+      SIDERVIA_DATA_DIR: /var/lib/sidervia
+      SIDERVIA_LISTEN_ADDR: 0.0.0.0:8080
+      SIDERVIA_PUBLIC_URL: "${SIDERVIA_PUBLIC_URL:?Set the external HTTPS origin}"
+      SIDERVIA_MASTER_KEY_FILE: /run/secrets/master.key
+      SIDERVIA_BOOTSTRAP_PASSWORD_FILE: /run/secrets/bootstrap-password
+      SIDERVIA_LOG_LEVEL: info
+      SIDERVIA_SHUTDOWN_TIMEOUT: 30s
+    volumes:
+      - sidervia-data:/var/lib/sidervia
+      - ./secrets/master.key:/run/secrets/master.key:ro
+      - ./secrets/bootstrap-password:/run/secrets/bootstrap-password:ro
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=64m,mode=1770,uid=65532,gid=65532
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    stop_grace_period: 40s
+    healthcheck:
+      test: ["CMD", "/sidervia", "doctor", "--healthcheck"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    logging:
+      driver: local
+      options:
+        max-size: 10m
+        max-file: "5"
+
+volumes:
+  sidervia-data:

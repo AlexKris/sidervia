@@ -1,0 +1,10 @@
+Sidervia
+Copyright (C) 2026 AlexKris and contributors
+
+SPDX-License-Identifier: AGPL-3.0-only
+
+Sidervia is licensed under version 3 of the GNU Affero General Public
+License only, not any later version. The complete license text is in LICENSE.
+
+Third-party components remain subject to their respective licenses. Release
+artifacts must include the generated third-party notices and SBOM.

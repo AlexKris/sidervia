@@ -1,0 +1,10 @@
+packages: []
+
+# pnpm 11 defaults to mutating node_modules before every script when its
+# heuristic sees a mismatch. Installs are explicit and frozen in this repo.
+verifyDepsBeforeRun: false
+
+# Vite invokes esbuild during development and production builds. No other
+# dependency install script is approved by default.
+allowBuilds:
+  esbuild: true

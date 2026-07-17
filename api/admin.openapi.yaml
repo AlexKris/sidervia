@@ -1,0 +1,976 @@
+openapi: 3.1.0
+info:
+  title: Sidervia Admin API
+  version: 0.1.0
+  description: Same-origin control-plane API for a single Sidervia administrator.
+servers:
+  - url: /api/admin/v1
+security:
+  - sessionCookie: []
+paths:
+  /auth/login:
+    post:
+      security: []
+      operationId: login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Authenticated session
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Session'
+        default:
+          $ref: '#/components/responses/Error'
+  /auth/logout:
+    post:
+      operationId: logout
+      parameters:
+        - $ref: '#/components/parameters/CSRF'
+      responses:
+        '204':
+          description: Session revoked
+        default:
+          $ref: '#/components/responses/Error'
+  /auth/session:
+    get:
+      operationId: getSession
+      responses:
+        '200':
+          description: Current session and recoverable in-memory CSRF token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Session'
+        default:
+          $ref: '#/components/responses/Error'
+  /auth/password:
+    put:
+      operationId: changePassword
+      parameters:
+        - $ref: '#/components/parameters/CSRF'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PasswordChangeRequest'
+      responses:
+        '200':
+          description: Rotated current session
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Session'
+        default:
+          $ref: '#/components/responses/Error'
+  /auth/totp/setup:
+    post:
+      operationId: setupTOTP
+      parameters:
+        - $ref: '#/components/parameters/CSRF'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [password]
+              properties:
+                password:
+                  type: string
+                  format: password
+      responses:
+        '200':
+          description: Pending TOTP secret, returned only during setup
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TOTPSetup'
+        default:
+          $ref: '#/components/responses/Error'
+  /auth/totp/confirm:
+    post:
+      operationId: confirmTOTP
+      parameters:
+        - $ref: '#/components/parameters/CSRF'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TOTPCodeRequest'
+      responses:
+        '200':
+          description: Rotated current session
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Session'
+        default:
+          $ref: '#/components/responses/Error'
+  /auth/totp:
+    delete:
+      operationId: disableTOTP
+      parameters:
+        - $ref: '#/components/parameters/CSRF'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [password, code]
+              properties:
+                password:
+                  type: string
+                  format: password
+                code:
+                  type: string
+                  pattern: '^[0-9]{6}$'
+      responses:
+        '200':
+          description: Rotated current session
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Session'
+        default:
+          $ref: '#/components/responses/Error'
+  /providers:
+    get:
+      operationId: listProviders
+      responses:
+        '200':
+          description: Provider descriptors
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Provider'
+        default:
+          $ref: '#/components/responses/Error'
+  /dashboard:
+    get:
+      operationId: getDashboard
+      responses:
+        '200':
+          description: Control-plane overview
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Dashboard'
+        default:
+          $ref: '#/components/responses/Error'
+  /system/health:
+    get:
+      operationId: getSystemHealth
+      responses:
+        '200':
+          description: System and build health
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemHealth'
+        default:
+          $ref: '#/components/responses/Error'
+  /audit-events:
+    get:
+      operationId: listAuditEvents
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: Audit event page
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuditEventPage'
+        default:
+          $ref: '#/components/responses/Error'
+  /proxies:
+    get:
+      operationId: listProxies
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: Proxy page
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProxyPage'
+        default:
+          $ref: '#/components/responses/Error'
+    post:
+      operationId: createProxy
+      parameters:
+        - $ref: '#/components/parameters/CSRF'
+      requestBody:
+        $ref: '#/components/requestBodies/Proxy'
+      responses:
+        '201':
+          $ref: '#/components/responses/Proxy'
+        default:
+          $ref: '#/components/responses/Error'
+  /proxies/{id}:
+    parameters:
+      - $ref: '#/components/parameters/ResourceID'
+    get:
+      operationId: getProxy
+      responses:
+        '200':
+          $ref: '#/components/responses/Proxy'
+        default:
+          $ref: '#/components/responses/Error'
+    patch:
+      operationId: updateProxy
+      parameters:
+        - $ref: '#/components/parameters/CSRF'
+        - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        $ref: '#/components/requestBodies/Proxy'
+      responses:
+        '200':
+          $ref: '#/components/responses/Proxy'
+        default:
+          $ref: '#/components/responses/Error'
+    delete:
+      operationId: deleteProxy
+      parameters:
+        - $ref: '#/components/parameters/CSRF'
+        - $ref: '#/components/parameters/IfMatch'
+      responses:
+        '204':
+          description: Deleted
+        default:
+          $ref: '#/components/responses/Error'
+  /upstreams:
+    get:
+      operationId: listUpstreams
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: Upstream page
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UpstreamPage'
+        default:
+          $ref: '#/components/responses/Error'
+    post:
+      operationId: createUpstream
+      parameters:
+        - $ref: '#/components/parameters/CSRF'
+      requestBody:
+        $ref: '#/components/requestBodies/Upstream'
+      responses:
+        '201':
+          $ref: '#/components/responses/Upstream'
+        default:
+          $ref: '#/components/responses/Error'
+  /upstreams/{id}:
+    parameters:
+      - $ref: '#/components/parameters/ResourceID'
+    get:
+      operationId: getUpstream
+      responses:
+        '200':
+          $ref: '#/components/responses/Upstream'
+        default:
+          $ref: '#/components/responses/Error'
+    patch:
+      operationId: updateUpstream
+      parameters:
+        - $ref: '#/components/parameters/CSRF'
+        - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        $ref: '#/components/requestBodies/Upstream'
+      responses:
+        '200':
+          $ref: '#/components/responses/Upstream'
+        default:
+          $ref: '#/components/responses/Error'
+    delete:
+      operationId: deleteUpstream
+      parameters:
+        - $ref: '#/components/parameters/CSRF'
+        - $ref: '#/components/parameters/IfMatch'
+      responses:
+        '204':
+          description: Deleted
+        default:
+          $ref: '#/components/responses/Error'
+  /accounts:
+    get:
+      operationId: listAccounts
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: Account page
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountPage'
+        default:
+          $ref: '#/components/responses/Error'
+    post:
+      operationId: createAccount
+      parameters:
+        - $ref: '#/components/parameters/CSRF'
+      requestBody:
+        $ref: '#/components/requestBodies/Account'
+      responses:
+        '201':
+          $ref: '#/components/responses/Account'
+        default:
+          $ref: '#/components/responses/Error'
+  /accounts/{id}:
+    parameters:
+      - $ref: '#/components/parameters/ResourceID'
+    get:
+      operationId: getAccount
+      responses:
+        '200':
+          $ref: '#/components/responses/Account'
+        default:
+          $ref: '#/components/responses/Error'
+    patch:
+      operationId: updateAccount
+      parameters:
+        - $ref: '#/components/parameters/CSRF'
+        - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        $ref: '#/components/requestBodies/Account'
+      responses:
+        '200':
+          $ref: '#/components/responses/Account'
+        default:
+          $ref: '#/components/responses/Error'
+    delete:
+      operationId: deleteAccount
+      parameters:
+        - $ref: '#/components/parameters/CSRF'
+        - $ref: '#/components/parameters/IfMatch'
+      responses:
+        '204':
+          description: Deleted
+        default:
+          $ref: '#/components/responses/Error'
+  /model-routes:
+    get:
+      operationId: listModelRoutes
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: Model route page
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ModelRoutePage'
+        default:
+          $ref: '#/components/responses/Error'
+    post:
+      operationId: createModelRoute
+      parameters:
+        - $ref: '#/components/parameters/CSRF'
+      requestBody:
+        $ref: '#/components/requestBodies/ModelRoute'
+      responses:
+        '201':
+          $ref: '#/components/responses/ModelRoute'
+        default:
+          $ref: '#/components/responses/Error'
+  /model-routes/{id}:
+    parameters:
+      - $ref: '#/components/parameters/ResourceID'
+    get:
+      operationId: getModelRoute
+      responses:
+        '200':
+          $ref: '#/components/responses/ModelRoute'
+        default:
+          $ref: '#/components/responses/Error'
+    patch:
+      operationId: updateModelRoute
+      parameters:
+        - $ref: '#/components/parameters/CSRF'
+        - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        $ref: '#/components/requestBodies/ModelRoute'
+      responses:
+        '200':
+          $ref: '#/components/responses/ModelRoute'
+        default:
+          $ref: '#/components/responses/Error'
+    delete:
+      operationId: deleteModelRoute
+      parameters:
+        - $ref: '#/components/parameters/CSRF'
+        - $ref: '#/components/parameters/IfMatch'
+      responses:
+        '204':
+          description: Deleted
+        default:
+          $ref: '#/components/responses/Error'
+  /client-keys:
+    get:
+      operationId: listClientKeys
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: Client key page
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClientKeyPage'
+        default:
+          $ref: '#/components/responses/Error'
+    post:
+      operationId: createClientKey
+      parameters:
+        - $ref: '#/components/parameters/CSRF'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ClientKeyCreateRequest'
+      responses:
+        '201':
+          description: Client key and one-time secret
+          headers:
+            ETag:
+              $ref: '#/components/headers/ETag'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreatedClientKey'
+        default:
+          $ref: '#/components/responses/Error'
+  /client-keys/{id}:
+    parameters:
+      - $ref: '#/components/parameters/ResourceID'
+    get:
+      operationId: getClientKey
+      responses:
+        '200':
+          $ref: '#/components/responses/ClientKey'
+        default:
+          $ref: '#/components/responses/Error'
+    patch:
+      operationId: updateClientKey
+      parameters:
+        - $ref: '#/components/parameters/CSRF'
+        - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ClientKeyUpdateRequest'
+      responses:
+        '200':
+          $ref: '#/components/responses/ClientKey'
+        default:
+          $ref: '#/components/responses/Error'
+    delete:
+      operationId: revokeClientKey
+      parameters:
+        - $ref: '#/components/parameters/CSRF'
+        - $ref: '#/components/parameters/IfMatch'
+      responses:
+        '204':
+          description: Revoked
+        default:
+          $ref: '#/components/responses/Error'
+components:
+  securitySchemes:
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: sidervia_session
+  parameters:
+    CSRF:
+      name: X-CSRF-Token
+      in: header
+      required: true
+      schema:
+        type: string
+    IfMatch:
+      name: If-Match
+      in: header
+      required: true
+      schema:
+        type: string
+        pattern: '^"v[1-9][0-9]*"$'
+    ResourceID:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+    Limit:
+      name: limit
+      in: query
+      required: false
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 200
+        default: 50
+    Cursor:
+      name: cursor
+      in: query
+      required: false
+      schema:
+        type: string
+  headers:
+    ETag:
+      description: Mutable resource version
+      schema:
+        type: string
+  requestBodies:
+    Proxy:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ProxyRequest'
+    Upstream:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/UpstreamRequest'
+    Account:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/AccountRequest'
+    ModelRoute:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ModelRouteRequest'
+  responses:
+    Error:
+      description: Stable safe error envelope
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorEnvelope'
+    Proxy:
+      description: Proxy resource
+      headers:
+        ETag:
+          $ref: '#/components/headers/ETag'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Proxy'
+    Upstream:
+      description: Upstream resource
+      headers:
+        ETag:
+          $ref: '#/components/headers/ETag'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Upstream'
+    Account:
+      description: Account resource without credential material
+      headers:
+        ETag:
+          $ref: '#/components/headers/ETag'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Account'
+    ModelRoute:
+      description: Model route resource
+      headers:
+        ETag:
+          $ref: '#/components/headers/ETag'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ModelRoute'
+    ClientKey:
+      description: Client key metadata without secret
+      headers:
+        ETag:
+          $ref: '#/components/headers/ETag'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ClientKey'
+  schemas:
+    ErrorEnvelope:
+      type: object
+      additionalProperties: false
+      required: [error]
+      properties:
+        error:
+          type: object
+          additionalProperties: false
+          required: [code, message, request_id]
+          properties:
+            code:
+              type: string
+            message:
+              type: string
+            request_id:
+              type: string
+            details:
+              type: object
+              additionalProperties: true
+    LoginRequest:
+      type: object
+      additionalProperties: false
+      required: [password]
+      properties:
+        password:
+          type: string
+          format: password
+        totp_code:
+          type: string
+          pattern: '^[0-9]{6}$'
+    PasswordChangeRequest:
+      type: object
+      additionalProperties: false
+      required: [current_password, new_password]
+      properties:
+        current_password:
+          type: string
+          format: password
+        new_password:
+          type: string
+          format: password
+          minLength: 14
+          maxLength: 256
+    TOTPCodeRequest:
+      type: object
+      additionalProperties: false
+      required: [code]
+      properties:
+        code:
+          type: string
+          pattern: '^[0-9]{6}$'
+    Session:
+      type: object
+      additionalProperties: false
+      required: [csrf_token, created_at, idle_expires_at, absolute_expires_at, totp_enabled]
+      properties:
+        csrf_token:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        idle_expires_at:
+          type: string
+          format: date-time
+        absolute_expires_at:
+          type: string
+          format: date-time
+        totp_enabled:
+          type: boolean
+    TOTPSetup:
+      type: object
+      additionalProperties: false
+      required: [secret, uri, expires_at]
+      properties:
+        secret:
+          type: string
+        uri:
+          type: string
+        expires_at:
+          type: string
+          format: date-time
+    Provider:
+      type: object
+      required: [id, name, auth_methods, capabilities, implementation_status]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        auth_methods:
+          type: array
+          items: { type: string }
+        capabilities:
+          type: array
+          items: { type: string }
+        implementation_status:
+          type: string
+          enum: [planned, beta, stable]
+    Dashboard:
+      type: object
+      required: [database_ready, admin_totp_enabled, counts, warnings]
+      properties:
+        database_ready: { type: boolean }
+        admin_totp_enabled: { type: boolean }
+        counts:
+          type: object
+          additionalProperties: { type: integer }
+        warnings:
+          type: array
+          items: { type: string }
+    BuildInfo:
+      type: object
+      required: [version, commit, build_time, go_version]
+      properties:
+        version: { type: string }
+        commit: { type: string }
+        build_time: { type: string }
+        go_version: { type: string }
+    SystemHealth:
+      type: object
+      required: [ready, database_ready, build]
+      properties:
+        ready: { type: boolean }
+        database_ready: { type: boolean }
+        build:
+          $ref: '#/components/schemas/BuildInfo'
+    MutableResource:
+      type: object
+      required: [id, version, created_at]
+      properties:
+        id: { type: string }
+        version: { type: integer, format: int64, minimum: 1 }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    Proxy:
+      allOf:
+        - $ref: '#/components/schemas/MutableResource'
+        - type: object
+          required: [name, scheme, host, port, username_configured, password_configured, allow_insecure_tls, enabled]
+          properties:
+            name: { type: string }
+            scheme: { type: string, enum: [http, https, socks5] }
+            host: { type: string }
+            port: { type: integer }
+            username_configured: { type: boolean }
+            password_configured: { type: boolean }
+            tls_server_name: { type: string }
+            allow_insecure_tls: { type: boolean }
+            enabled: { type: boolean }
+    ProxyRequest:
+      type: object
+      additionalProperties: false
+      required: [name, scheme, host, port, allow_insecure_tls, enabled]
+      properties:
+        name: { type: string }
+        scheme: { type: string, enum: [http, https, socks5] }
+        host: { type: string }
+        port: { type: integer, minimum: 1, maximum: 65535 }
+        username: { type: string }
+        password: { type: string, format: password }
+        tls_server_name: { type: string }
+        allow_insecure_tls: { type: boolean }
+        enabled: { type: boolean }
+    Upstream:
+      allOf:
+        - $ref: '#/components/schemas/MutableResource'
+        - type: object
+          required: [provider_id, name, base_url, allow_private_network, enabled]
+          properties:
+            provider_id: { type: string }
+            name: { type: string }
+            base_url: { type: string, format: uri }
+            default_proxy_id: { type: string }
+            allow_private_network: { type: boolean }
+            enabled: { type: boolean }
+    UpstreamRequest:
+      type: object
+      additionalProperties: false
+      required: [provider_id, name, base_url, allow_private_network, enabled]
+      properties:
+        provider_id: { type: string }
+        name: { type: string }
+        base_url: { type: string, format: uri }
+        default_proxy_id: { type: string }
+        allow_private_network: { type: boolean }
+        enabled: { type: boolean }
+    Account:
+      allOf:
+        - $ref: '#/components/schemas/MutableResource'
+        - type: object
+          required: [upstream_id, name, auth_kind, billing_kind, credential_configured, status, priority, max_concurrency]
+          properties:
+            upstream_id: { type: string }
+            name: { type: string }
+            auth_kind: { type: string, enum: [api_key] }
+            billing_kind: { type: string, enum: [subscription, metered, custom] }
+            credential_configured: { type: boolean }
+            credential_expires_at: { type: string, format: date-time }
+            proxy_id: { type: string }
+            status: { type: string, enum: [draft, disabled] }
+            priority: { type: integer }
+            max_concurrency: { type: integer }
+    AccountRequest:
+      type: object
+      additionalProperties: false
+      required: [upstream_id, name, billing_kind, status]
+      properties:
+        upstream_id: { type: string }
+        name: { type: string }
+        credential: { type: string, format: password }
+        credential_expires_at: { type: string, format: date-time }
+        proxy_id: { type: string }
+        billing_kind: { type: string, enum: [subscription, metered, custom] }
+        status: { type: string, enum: [draft, disabled] }
+        priority: { type: integer }
+        max_concurrency: { type: integer }
+    RouteCandidate:
+      type: object
+      additionalProperties: false
+      required: [account_id, upstream_model_id, enabled, protocols, capabilities]
+      properties:
+        account_id: { type: string }
+        upstream_model_id: { type: string }
+        enabled: { type: boolean }
+        protocols:
+          type: array
+          items: { type: string, enum: [openai, anthropic, gemini, xai] }
+        capabilities:
+          type: array
+          items: { type: string }
+    ModelRoute:
+      allOf:
+        - $ref: '#/components/schemas/MutableResource'
+        - type: object
+          required: [public_model_id, description, enabled, multiple_candidates_confirmed, candidates]
+          properties:
+            public_model_id: { type: string }
+            description: { type: string }
+            enabled: { type: boolean }
+            multiple_candidates_confirmed: { type: boolean }
+            candidates:
+              type: array
+              items:
+                $ref: '#/components/schemas/RouteCandidate'
+    ModelRouteRequest:
+      type: object
+      additionalProperties: false
+      required: [public_model_id, description, enabled, confirm_multiple_candidates, candidates]
+      properties:
+        public_model_id: { type: string }
+        description: { type: string }
+        enabled: { type: boolean }
+        confirm_multiple_candidates: { type: boolean }
+        candidates:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/RouteCandidate'
+    ClientKey:
+      allOf:
+        - $ref: '#/components/schemas/MutableResource'
+        - type: object
+          required: [name, prefix, status]
+          properties:
+            name: { type: string }
+            prefix: { type: string }
+            status: { type: string, enum: [active, disabled, revoked] }
+            expires_at: { type: string, format: date-time }
+            last_used_at: { type: string, format: date-time }
+    ClientKeyCreateRequest:
+      type: object
+      additionalProperties: false
+      required: [name]
+      properties:
+        name: { type: string }
+        expires_at: { type: string, format: date-time }
+    ClientKeyUpdateRequest:
+      type: object
+      additionalProperties: false
+      required: [name, status]
+      properties:
+        name: { type: string }
+        status: { type: string, enum: [active, disabled] }
+        expires_at: { type: string, format: date-time }
+    CreatedClientKey:
+      type: object
+      required: [client_key, secret]
+      properties:
+        client_key:
+          $ref: '#/components/schemas/ClientKey'
+        secret:
+          type: string
+    AuditEvent:
+      type: object
+      required: [id, event_type, actor_kind, outcome, metadata, created_at]
+      properties:
+        id: { type: string }
+        event_type: { type: string }
+        actor_kind: { type: string }
+        actor_id: { type: string }
+        target_kind: { type: string }
+        target_id: { type: string }
+        request_id: { type: string }
+        outcome: { type: string }
+        metadata:
+          type: object
+          additionalProperties: true
+        created_at: { type: string, format: date-time }
+    ProxyPage:
+      type: object
+      required: [items]
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/Proxy' } }
+        next_cursor: { type: string }
+    UpstreamPage:
+      type: object
+      required: [items]
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/Upstream' } }
+        next_cursor: { type: string }
+    AccountPage:
+      type: object
+      required: [items]
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/Account' } }
+        next_cursor: { type: string }
+    ModelRoutePage:
+      type: object
+      required: [items]
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/ModelRoute' } }
+        next_cursor: { type: string }
+    ClientKeyPage:
+      type: object
+      required: [items]
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/ClientKey' } }
+        next_cursor: { type: string }
+    AuditEventPage:
+      type: object
+      required: [items]
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/AuditEvent' } }
+        next_cursor: { type: string }
