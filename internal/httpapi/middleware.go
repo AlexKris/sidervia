@@ -44,14 +44,10 @@ func (s *Server) baseMiddleware(next http.Handler) http.Handler {
 		if s.metrics != nil {
 			observe = s.metrics.StartRequest()
 		}
-		requestID := r.Header.Get("X-Request-ID")
-		if !validRequestID(requestID) {
-			var err error
-			requestID, err = s.ids.Object("req")
-			if err != nil {
-				http.Error(w, "request identifier unavailable", http.StatusInternalServerError)
-				return
-			}
+		requestID, err := s.ids.Object("req")
+		if err != nil {
+			http.Error(w, "request identifier unavailable", http.StatusInternalServerError)
+			return
 		}
 		ctx := context.WithValue(r.Context(), requestIDKey, requestID)
 		r = r.WithContext(ctx)
@@ -226,18 +222,6 @@ func setSecurityHeaders(w http.ResponseWriter, https bool) {
 	if https {
 		w.Header().Set("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
 	}
-}
-
-func validRequestID(value string) bool {
-	if len(value) < 1 || len(value) > 128 {
-		return false
-	}
-	for _, char := range []byte(value) {
-		if char < 0x21 || char > 0x7e {
-			return false
-		}
-	}
-	return true
 }
 
 func isUnsafeMethod(method string) bool {

@@ -142,6 +142,14 @@ func TestStrictJSONOriginAndProtocolBoundary(t *testing.T) {
 		t.Fatalf("wrong origin status=%d", wrongOriginResult.Code)
 	}
 
+	publicCallback := httptest.NewRequest(http.MethodGet, "/oauth/callback/google?code=test&state=test", nil)
+	publicCallback.Header.Set("Origin", "https://accounts.google.com")
+	publicCallbackResult := httptest.NewRecorder()
+	api.handler.ServeHTTP(publicCallbackResult, publicCallback)
+	if publicCallbackResult.Code != http.StatusNotImplemented {
+		t.Fatalf("public OAuth callback was incorrectly origin-protected: status=%d", publicCallbackResult.Code)
+	}
+
 	for _, path := range []string{"/api/unknown", "/v1/chat/completions", "/v1beta/models/example:generateContent"} {
 		request := httptest.NewRequest(http.MethodGet, path, nil)
 		result := httptest.NewRecorder()

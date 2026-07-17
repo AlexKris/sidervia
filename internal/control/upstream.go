@@ -116,13 +116,22 @@ func (s *Service) UpdateUpstream(ctx context.Context, actor Actor, publicID stri
 		return Upstream{}, err
 	}
 	defer tx.Rollback()
+	var existingProviderID string
+	if err := tx.QueryRowContext(ctx, "SELECT provider_id FROM upstreams WHERE public_id = ?", publicID).Scan(&existingProviderID); errors.Is(err, sql.ErrNoRows) {
+		return Upstream{}, ErrNotFound
+	} else if err != nil {
+		return Upstream{}, err
+	}
+	if input.ProviderID != existingProviderID {
+		return Upstream{}, ValidationError{Field: "provider_id", Message: "cannot be changed after upstream creation"}
+	}
 	proxyID, err := optionalInternalID(ctx, tx, "egress_proxies", input.DefaultProxyID)
 	if err != nil {
 		return Upstream{}, err
 	}
-	result, err := tx.ExecContext(ctx, `UPDATE upstreams SET provider_id = ?, name = ?, base_url = ?,
+	result, err := tx.ExecContext(ctx, `UPDATE upstreams SET name = ?, base_url = ?,
         default_proxy_id = ?, allow_private_network = ?, enabled = ?, version = version + 1,
-        updated_at_ms = ? WHERE public_id = ? AND version = ?`, input.ProviderID, input.Name, input.BaseURL,
+		updated_at_ms = ? WHERE public_id = ? AND version = ?`, input.Name, input.BaseURL,
 		proxyID, boolInt(input.AllowPrivateNetwork), boolInt(input.Enabled), s.clock.Now().UnixMilli(), publicID, expectedVersion)
 	if err != nil {
 		return Upstream{}, mapSQLError(err)

@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Sidervia Admin API
-  version: 0.1.0
+  version: 0.2.0
   description: Same-origin control-plane API for a single Sidervia administrator.
 servers:
   - url: /api/admin/v1
@@ -172,6 +172,47 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Dashboard'
+        default:
+          $ref: '#/components/responses/Error'
+  /requests:
+    get:
+      operationId: listRequests
+      parameters:
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Cursor'
+      responses:
+        '200':
+          description: Body-free request metadata page
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RequestRecordPage'
+        default:
+          $ref: '#/components/responses/Error'
+  /requests/{id}:
+    parameters:
+      - $ref: '#/components/parameters/ResourceID'
+    get:
+      operationId: getRequest
+      responses:
+        '200':
+          description: Body-free request metadata
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RequestRecord'
+        default:
+          $ref: '#/components/responses/Error'
+  /usage:
+    get:
+      operationId: getUsageSummary
+      responses:
+        '200':
+          description: Basic usage summary for the trailing 24 hours
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UsageSummary'
         default:
           $ref: '#/components/responses/Error'
   /system/health:
@@ -373,6 +414,123 @@ paths:
       responses:
         '204':
           description: Deleted
+        default:
+          $ref: '#/components/responses/Error'
+  /accounts/{id}/validate:
+    parameters:
+      - $ref: '#/components/parameters/ResourceID'
+    post:
+      operationId: validateAccount
+      parameters:
+        - $ref: '#/components/parameters/CSRF'
+        - $ref: '#/components/parameters/IfMatch'
+      responses:
+        '200':
+          $ref: '#/components/responses/Account'
+        default:
+          $ref: '#/components/responses/Error'
+  /oauth/providers/google:
+    get:
+      operationId: getGoogleOAuthConfig
+      responses:
+        '200':
+          $ref: '#/components/responses/GoogleOAuthConfig'
+        default:
+          $ref: '#/components/responses/Error'
+    post:
+      operationId: createGoogleOAuthConfig
+      parameters:
+        - $ref: '#/components/parameters/CSRF'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GoogleOAuthConfigCreateRequest'
+      responses:
+        '201':
+          $ref: '#/components/responses/GoogleOAuthConfig'
+        default:
+          $ref: '#/components/responses/Error'
+    patch:
+      operationId: updateGoogleOAuthConfig
+      parameters:
+        - $ref: '#/components/parameters/CSRF'
+        - $ref: '#/components/parameters/IfMatch'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GoogleOAuthConfigUpdateRequest'
+      responses:
+        '200':
+          $ref: '#/components/responses/GoogleOAuthConfig'
+        default:
+          $ref: '#/components/responses/Error'
+  /oauth-attempts:
+    post:
+      operationId: createOAuthAttempt
+      parameters:
+        - $ref: '#/components/parameters/CSRF'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OAuthAttemptRequest'
+      responses:
+        '201':
+          description: OAuth authorization attempt
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OAuthAttempt'
+        default:
+          $ref: '#/components/responses/Error'
+  /oauth-attempts/{id}:
+    parameters:
+      - $ref: '#/components/parameters/ResourceID'
+    get:
+      operationId: getOAuthAttempt
+      responses:
+        '200':
+          description: OAuth authorization attempt status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OAuthAttempt'
+        default:
+          $ref: '#/components/responses/Error'
+    delete:
+      operationId: cancelOAuthAttempt
+      parameters:
+        - $ref: '#/components/parameters/CSRF'
+      responses:
+        '204':
+          description: Cancelled
+        default:
+          $ref: '#/components/responses/Error'
+  /oauth-attempts/{id}/callback:
+    parameters:
+      - $ref: '#/components/parameters/ResourceID'
+    post:
+      operationId: completeOAuthAttemptCallback
+      parameters:
+        - $ref: '#/components/parameters/CSRF'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OAuthCallbackRequest'
+      responses:
+        '200':
+          description: Completed OAuth account
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OAuthCompletion'
         default:
           $ref: '#/components/responses/Error'
   /model-routes:
@@ -611,6 +769,15 @@ components:
         application/json:
           schema:
             $ref: '#/components/schemas/Account'
+    GoogleOAuthConfig:
+      description: Google OAuth configuration without client secret material
+      headers:
+        ETag:
+          $ref: '#/components/headers/ETag'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/GoogleOAuthConfig'
     ModelRoute:
       description: Model route resource
       headers:
@@ -740,6 +907,56 @@ components:
         warnings:
           type: array
           items: { type: string }
+    RequestRecord:
+      type: object
+      additionalProperties: false
+      required: [id, client_key_id, client_key_name, protocol, endpoint_kind, public_model_id, status_code, streamed, started_at, completed_at, duration_ms, request_bytes, response_bytes, usage]
+      properties:
+        id: { type: string }
+        client_key_id: { type: string }
+        client_key_name: { type: string }
+        protocol: { type: string }
+        endpoint_kind: { type: string }
+        public_model_id: { type: string }
+        provider_id: { type: string }
+        upstream_id: { type: string }
+        account_id: { type: string }
+        status_code: { type: integer }
+        error_code: { type: string }
+        streamed: { type: boolean }
+        started_at: { type: string, format: date-time }
+        first_byte_at: { type: string, format: date-time }
+        completed_at: { type: string, format: date-time }
+        duration_ms: { type: integer, format: int64, minimum: 0 }
+        ttft_ms: { type: integer, format: int64, minimum: 0 }
+        request_bytes: { type: integer, format: int64, minimum: 0 }
+        response_bytes: { type: integer, format: int64, minimum: 0 }
+        usage:
+          type: object
+          additionalProperties: { type: integer, format: int64, minimum: 0 }
+    RequestRecordPage:
+      type: object
+      additionalProperties: false
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/RequestRecord'
+        next_cursor: { type: string }
+    UsageSummary:
+      type: object
+      additionalProperties: false
+      required: [window_start, requests, errors, streamed, input_tokens, output_tokens, cache_read_tokens, reasoning_tokens]
+      properties:
+        window_start: { type: string, format: date-time }
+        requests: { type: integer, format: int64, minimum: 0 }
+        errors: { type: integer, format: int64, minimum: 0 }
+        streamed: { type: integer, format: int64, minimum: 0 }
+        input_tokens: { type: integer, format: int64, minimum: 0 }
+        output_tokens: { type: integer, format: int64, minimum: 0 }
+        cache_read_tokens: { type: integer, format: int64, minimum: 0 }
+        reasoning_tokens: { type: integer, format: int64, minimum: 0 }
     BuildInfo:
       type: object
       required: [version, commit, build_time, go_version]
@@ -810,7 +1027,9 @@ components:
       additionalProperties: false
       required: [provider_id, name, base_url, allow_private_network, enabled]
       properties:
-        provider_id: { type: string }
+        provider_id:
+          type: string
+          description: Immutable after creation; updates must retain the existing Provider ID.
         name: { type: string }
         base_url: { type: string, format: uri }
         default_proxy_id: { type: string }
@@ -824,28 +1043,108 @@ components:
           properties:
             upstream_id: { type: string }
             name: { type: string }
-            auth_kind: { type: string, enum: [api_key] }
+            auth_kind: { type: string, enum: [api_key, oauth] }
             billing_kind: { type: string, enum: [subscription, metered, custom] }
             credential_configured: { type: boolean }
             credential_expires_at: { type: string, format: date-time }
             proxy_id: { type: string }
-            status: { type: string, enum: [draft, disabled] }
+            status: { type: string, enum: [draft, validating, active, invalid, reauth_required, disabled] }
             priority: { type: integer }
             max_concurrency: { type: integer }
     AccountRequest:
       type: object
       additionalProperties: false
-      required: [upstream_id, name, billing_kind, status]
+      required: [upstream_id, name, auth_kind, billing_kind, status]
       properties:
         upstream_id: { type: string }
         name: { type: string }
-        credential: { type: string, format: password }
+        auth_kind: { type: string, enum: [api_key, oauth] }
+        credential:
+          type: string
+          format: password
+          writeOnly: true
+          description: Required when creating an api_key account; omitted for OAuth accounts and to retain an existing API key during update.
         credential_expires_at: { type: string, format: date-time }
         proxy_id: { type: string }
         billing_kind: { type: string, enum: [subscription, metered, custom] }
-        status: { type: string, enum: [draft, disabled] }
+        status:
+          type: string
+          enum: [draft, active, disabled]
+          description: Creation accepts draft or disabled. Updates may retain active only when an already active account keeps the same credential and egress; validation is the only activation path.
         priority: { type: integer }
         max_concurrency: { type: integer }
+    GoogleOAuthConfig:
+      allOf:
+        - $ref: '#/components/schemas/MutableResource'
+        - type: object
+          required: [provider_id, client_id, client_secret_configured, project_id, scopes, redirect_uri, enabled, beta]
+          properties:
+            provider_id: { type: string, enum: [google] }
+            client_id: { type: string }
+            client_secret_configured: { type: boolean }
+            project_id: { type: string }
+            scopes:
+              type: array
+              items: { type: string }
+            redirect_uri: { type: string, format: uri }
+            enabled: { type: boolean }
+            beta: { type: boolean }
+    GoogleOAuthConfigCreateRequest:
+      type: object
+      additionalProperties: false
+      required: [client_id, client_secret, project_id, enabled]
+      properties:
+        client_id: { type: string }
+        client_secret: { type: string, format: password, writeOnly: true }
+        project_id: { type: string, pattern: '^[a-z][a-z0-9-]{4,28}[a-z0-9]$' }
+        enabled: { type: boolean }
+    GoogleOAuthConfigUpdateRequest:
+      type: object
+      additionalProperties: false
+      required: [client_id, project_id, enabled]
+      properties:
+        client_id: { type: string }
+        client_secret:
+          type: string
+          format: password
+          writeOnly: true
+          description: Omit to retain the currently configured client secret.
+        project_id: { type: string, pattern: '^[a-z][a-z0-9-]{4,28}[a-z0-9]$' }
+        enabled: { type: boolean }
+    OAuthAttemptRequest:
+      type: object
+      additionalProperties: false
+      required: [account_id]
+      properties:
+        account_id: { type: string }
+    OAuthCallbackRequest:
+      type: object
+      additionalProperties: false
+      required: [callback_url]
+      properties:
+        callback_url: { type: string, format: uri }
+    OAuthAttempt:
+      type: object
+      additionalProperties: false
+      required: [id, provider_id, account_id, flow_kind, status, expires_at, created_at, beta]
+      properties:
+        id: { type: string }
+        provider_id: { type: string, enum: [google] }
+        account_id: { type: string }
+        flow_kind: { type: string, enum: [authorization_code_pkce] }
+        status: { type: string, enum: [pending, exchanging, consumed, failed, cancelled] }
+        authorization_url: { type: string, format: uri }
+        expires_at: { type: string, format: date-time }
+        created_at: { type: string, format: date-time }
+        beta: { type: boolean }
+    OAuthCompletion:
+      type: object
+      additionalProperties: false
+      required: [attempt_id, account]
+      properties:
+        attempt_id: { type: string }
+        account:
+          $ref: '#/components/schemas/Account'
     RouteCandidate:
       type: object
       additionalProperties: false
@@ -856,6 +1155,7 @@ components:
         enabled: { type: boolean }
         protocols:
           type: array
+          description: Must match the selected account Provider; xAI accounts accept xai or openai compatibility protocol.
           items: { type: string, enum: [openai, anthropic, gemini, xai] }
         capabilities:
           type: array

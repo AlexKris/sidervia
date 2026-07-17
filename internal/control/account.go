@@ -3,12 +3,11 @@ package control
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
 	"errors"
 	"strings"
 	"time"
 
-	"github.com/AlexKris/sidervia/internal/cryptox"
+	"github.com/AlexKris/sidervia/internal/accountauth"
 )
 
 func (s *Service) CreateAccount(ctx context.Context, actor Actor, input AccountInput) (Account, error) {
@@ -20,9 +19,12 @@ func (s *Service) CreateAccount(ctx context.Context, actor Actor, input AccountI
 	if err != nil {
 		return Account{}, err
 	}
-	credential, err := s.encryptCredential(publicID, *input.Credential)
-	if err != nil {
-		return Account{}, err
+	var credential []byte
+	if input.Credential != nil {
+		credential, err = s.encryptCredential(publicID, *input.Credential)
+		if err != nil {
+			return Account{}, err
+		}
 	}
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -33,6 +35,13 @@ func (s *Service) CreateAccount(ctx context.Context, actor Actor, input AccountI
 	if err != nil {
 		return Account{}, err
 	}
+	var providerID string
+	if err := tx.QueryRowContext(ctx, "SELECT provider_id FROM upstreams WHERE id = ?", upstreamID).Scan(&providerID); err != nil {
+		return Account{}, err
+	}
+	if input.AuthKind == "oauth" && providerID != "google" {
+		return Account{}, ValidationError{Field: "auth_kind", Message: "OAuth is currently available only for Google"}
+	}
 	proxyID, err := optionalInternalID(ctx, tx, "egress_proxies", validOptionalReference(input.ProxyID))
 	if err != nil {
 		return Account{}, err
@@ -40,13 +49,13 @@ func (s *Service) CreateAccount(ctx context.Context, actor Actor, input AccountI
 	now := s.clock.Now().UnixMilli()
 	_, err = tx.ExecContext(ctx, `INSERT INTO accounts(public_id, upstream_id, name, auth_kind,
         billing_kind, credential_enc, credential_expires_at_ms, proxy_id, status, priority,
-        max_concurrency, created_at_ms, updated_at_ms) VALUES(?, ?, ?, 'api_key', ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		publicID, upstreamID, input.Name, input.BillingKind, credential, nullableTimeMillis(input.CredentialExpiresAt),
+		max_concurrency, created_at_ms, updated_at_ms) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		publicID, upstreamID, input.Name, input.AuthKind, input.BillingKind, nullableBytes(credential), nullableTimeMillis(input.CredentialExpiresAt),
 		proxyID, input.Status, *input.Priority, *input.MaxConcurrency, now, now)
 	if err != nil {
 		return Account{}, mapSQLError(err)
 	}
-	if err := s.audit(ctx, tx, actor, "account.created", "account", publicID, map[string]any{"billing_kind": input.BillingKind, "status": input.Status}); err != nil {
+	if err := s.audit(ctx, tx, actor, "account.created", "account", publicID, map[string]any{"auth_kind": input.AuthKind, "billing_kind": input.BillingKind, "status": input.Status}); err != nil {
 		return Account{}, err
 	}
 	if err := tx.Commit(); err != nil {
@@ -113,15 +122,38 @@ func (s *Service) UpdateAccount(ctx context.Context, actor Actor, publicID strin
 	if err != nil {
 		return Account{}, err
 	}
+	input.ProxyID = validOptionalReference(input.ProxyID)
 	var existingCredential []byte
-	err = s.db.QueryRowContext(ctx, "SELECT credential_enc FROM accounts WHERE public_id = ?", publicID).Scan(&existingCredential)
+	var existingAuthKind, existingStatus, existingUpstreamID string
+	var existingProxyID sql.NullString
+	err = s.db.QueryRowContext(ctx, `SELECT a.auth_kind, a.credential_enc, a.status, u.public_id, p.public_id
+		FROM accounts a JOIN upstreams u ON u.id = a.upstream_id
+		LEFT JOIN egress_proxies p ON p.id = a.proxy_id WHERE a.public_id = ?`, publicID).Scan(
+		&existingAuthKind, &existingCredential, &existingStatus, &existingUpstreamID, &existingProxyID)
 	if errors.Is(err, sql.ErrNoRows) {
 		return Account{}, ErrNotFound
 	}
 	if err != nil {
 		return Account{}, err
 	}
+	if input.AuthKind == "" {
+		input.AuthKind = existingAuthKind
+	}
+	if input.AuthKind != existingAuthKind {
+		return Account{}, ValidationError{Field: "auth_kind", Message: "cannot be changed after account creation"}
+	}
+	if input.Status == "active" {
+		if existingStatus != "active" {
+			return Account{}, ValidationError{Field: "status", Message: "only validation can activate an account"}
+		}
+		proxyUnchanged := (input.ProxyID == nil && !existingProxyID.Valid) ||
+			(input.ProxyID != nil && existingProxyID.Valid && *input.ProxyID == existingProxyID.String)
+		if input.UpstreamID != existingUpstreamID || !proxyUnchanged || input.Credential != nil {
+			return Account{}, ValidationError{Field: "status", Message: "credential or egress changes require the account to return to draft and be validated again"}
+		}
+	}
 	credential := existingCredential
+	credentialChanged := input.Credential != nil
 	if input.Credential != nil {
 		credential, err = s.encryptCredential(publicID, *input.Credential)
 		if err != nil {
@@ -137,14 +169,23 @@ func (s *Service) UpdateAccount(ctx context.Context, actor Actor, publicID strin
 	if err != nil {
 		return Account{}, err
 	}
-	proxyID, err := optionalInternalID(ctx, tx, "egress_proxies", validOptionalReference(input.ProxyID))
+	if input.AuthKind == "oauth" {
+		var providerID string
+		if err := tx.QueryRowContext(ctx, "SELECT provider_id FROM upstreams WHERE id = ?", upstreamID).Scan(&providerID); err != nil {
+			return Account{}, err
+		}
+		if providerID != "google" {
+			return Account{}, ValidationError{Field: "upstream_id", Message: "OAuth accounts currently require a Google upstream"}
+		}
+	}
+	proxyID, err := optionalInternalID(ctx, tx, "egress_proxies", input.ProxyID)
 	if err != nil {
 		return Account{}, err
 	}
 	result, err := tx.ExecContext(ctx, `UPDATE accounts SET upstream_id = ?, name = ?, billing_kind = ?,
-        credential_enc = ?, credential_expires_at_ms = ?, proxy_id = ?, status = ?, priority = ?,
-        max_concurrency = ?, version = version + 1, updated_at_ms = ? WHERE public_id = ? AND version = ?`,
-		upstreamID, input.Name, input.BillingKind, credential, nullableTimeMillis(input.CredentialExpiresAt),
+		credential_enc = ?, credential_version = credential_version + ?, credential_expires_at_ms = ?, proxy_id = ?, status = ?, priority = ?,
+		max_concurrency = ?, version = version + 1, updated_at_ms = ? WHERE public_id = ? AND version = ?`,
+		upstreamID, input.Name, input.BillingKind, credential, boolInt(credentialChanged), nullableTimeMillis(input.CredentialExpiresAt),
 		proxyID, input.Status, *input.Priority, *input.MaxConcurrency, s.clock.Now().UnixMilli(), publicID, expectedVersion)
 	if err != nil {
 		return Account{}, mapSQLError(err)
@@ -192,7 +233,13 @@ func (s *Service) validateAccountInput(input AccountInput, create bool) (Account
 	if input.UpstreamID == "" {
 		return AccountInput{}, ValidationError{Field: "upstream_id", Message: "is required"}
 	}
-	if create && input.Credential == nil {
+	if input.AuthKind == "" && create {
+		input.AuthKind = "api_key"
+	}
+	if input.AuthKind != "" && input.AuthKind != "api_key" && input.AuthKind != "oauth" {
+		return AccountInput{}, ValidationError{Field: "auth_kind", Message: "must be api_key or oauth"}
+	}
+	if create && input.AuthKind == "api_key" && input.Credential == nil {
 		return AccountInput{}, ValidationError{Field: "credential", Message: "is required"}
 	}
 	if input.Credential != nil {
@@ -201,6 +248,9 @@ func (s *Service) validateAccountInput(input AccountInput, create bool) (Account
 			return AccountInput{}, ValidationError{Field: "credential", Message: "is invalid"}
 		}
 		input.Credential = &clean
+	}
+	if input.AuthKind == "oauth" && input.Credential != nil {
+		return AccountInput{}, ValidationError{Field: "credential", Message: "must be omitted for OAuth accounts"}
 	}
 	if input.BillingKind == "" {
 		input.BillingKind = "subscription"
@@ -211,8 +261,9 @@ func (s *Service) validateAccountInput(input AccountInput, create bool) (Account
 	if input.Status == "" {
 		input.Status = "draft"
 	}
-	if input.Status != "draft" && input.Status != "disabled" {
-		return AccountInput{}, ValidationError{Field: "status", Message: "v0.1 only supports draft or disabled"}
+	validStatus := input.Status == "draft" || input.Status == "disabled" || (!create && input.Status == "active")
+	if !validStatus {
+		return AccountInput{}, ValidationError{Field: "status", Message: "must be draft or disabled; an update may retain an already active account"}
 	}
 	defaultPriority, defaultConcurrency := 20, 4
 	if input.BillingKind == "subscription" {
@@ -237,11 +288,14 @@ func (s *Service) validateAccountInput(input AccountInput, create bool) (Account
 }
 
 func (s *Service) encryptCredential(publicID, apiKey string) ([]byte, error) {
-	body, err := json.Marshal(map[string]any{"schema_version": 1, "api_key": apiKey})
-	if err != nil {
-		return nil, err
+	return accountauth.Encrypt(s.cipher, publicID, accountauth.Payload{SchemaVersion: 1, APIKey: apiKey})
+}
+
+func nullableBytes(value []byte) any {
+	if len(value) == 0 {
+		return nil
 	}
-	return s.cipher.Seal(body, cryptox.AAD("accounts", publicID, "credential_enc"))
+	return value
 }
 
 func scanAccount(row rowScanner) (Account, error) {

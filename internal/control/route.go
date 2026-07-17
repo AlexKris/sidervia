@@ -243,9 +243,18 @@ func validateRouteInput(input ModelRouteInput) (ModelRouteInput, error) {
 
 func (s *Service) replaceCandidates(ctx context.Context, tx *sql.Tx, routeID int64, candidates []RouteCandidate, now int64) error {
 	for _, candidate := range candidates {
-		accountID, err := lookupID(ctx, tx, "accounts", candidate.AccountID)
+		var accountID int64
+		var providerID string
+		err := tx.QueryRowContext(ctx, `SELECT a.id, u.provider_id FROM accounts a
+			JOIN upstreams u ON u.id = a.upstream_id WHERE a.public_id = ?`, candidate.AccountID).Scan(&accountID, &providerID)
+		if errors.Is(err, sql.ErrNoRows) {
+			return ErrNotFound
+		}
 		if err != nil {
 			return err
+		}
+		if !protocolsMatchProvider(providerID, candidate.Protocols) {
+			return ValidationError{Field: "protocols", Message: "does not match the candidate account provider"}
 		}
 		protocols, _ := json.Marshal(map[string]any{"schema_version": 1, "values": candidate.Protocols})
 		capabilities, _ := json.Marshal(map[string]any{"schema_version": 1, "values": candidate.Capabilities})
@@ -258,6 +267,25 @@ func (s *Service) replaceCandidates(ctx context.Context, tx *sql.Tx, routeID int
 		}
 	}
 	return nil
+}
+
+func protocolsMatchProvider(providerID string, protocols []string) bool {
+	allowed := map[string]map[string]bool{
+		"openai":            {"openai": true},
+		"anthropic":         {"anthropic": true},
+		"google":            {"gemini": true},
+		"xai":               {"openai": true, "xai": true},
+		"openai-compatible": {"openai": true},
+	}[providerID]
+	if len(allowed) == 0 {
+		return false
+	}
+	for _, protocol := range protocols {
+		if !allowed[protocol] {
+			return false
+		}
+	}
+	return true
 }
 
 func (s *Service) loadCandidates(ctx context.Context, routePublicID string) ([]RouteCandidate, error) {

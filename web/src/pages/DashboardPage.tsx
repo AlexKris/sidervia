@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
-import { AlertTriangle, Boxes, CheckCircle2, Database, KeyRound, Network, Route, ShieldCheck, Waypoints } from 'lucide-react'
+import { Activity, AlertTriangle, Boxes, CheckCircle2, Database, KeyRound, Network, Route, ShieldCheck, Waypoints } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { api, formatAPIError } from '../api/client'
 import type { Dashboard } from '../api/types'
@@ -7,7 +7,7 @@ import { ErrorPanel, LoadingState, PageHeader, Panel, StatusBadge } from '../com
 import styles from '../App.module.css'
 
 const countCards = [
-  ['accounts', Boxes], ['upstreams', Waypoints], ['proxies', Network], ['model_routes', Route], ['client_keys', KeyRound],
+  ['accounts', Boxes], ['upstreams', Waypoints], ['proxies', Network], ['model_routes', Route], ['client_keys', KeyRound], ['requests', Activity],
 ] as const
 
 export default function DashboardPage() {
@@ -21,7 +21,7 @@ export default function DashboardPage() {
     <div className={styles.metricGrid}>
       <Panel className={styles.metricCard}><div className={styles.metricIcon}><Database size={21} /></div><div><span>{t('dashboard.ready')}</span><strong>{dashboard.database_ready ? t('dashboard.healthy') : t('common.disabled')}</strong></div><StatusBadge value={dashboard.database_ready ? 'ready' : 'disabled'} /></Panel>
       <Panel className={styles.metricCard}><div className={styles.metricIcon}><ShieldCheck size={21} /></div><div><span>{t('dashboard.totp')}</span><strong>{dashboard.admin_totp_enabled ? t('dashboard.totpOn') : t('dashboard.totpOff')}</strong></div><StatusBadge value={dashboard.admin_totp_enabled ? 'enabled' : 'draft'} /></Panel>
-      {countCards.map(([key, Icon]) => <Panel className={styles.metricCard} key={key}><div className={styles.metricIcon}><Icon size={21} /></div><div><span>{t(`nav.${key === 'model_routes' ? 'routes' : key === 'client_keys' ? 'keys' : key}`)}</span><strong>{dashboard.counts[key] || 0}</strong></div></Panel>)}
+      {countCards.map(([key, Icon]) => <Panel className={styles.metricCard} key={key}><div className={styles.metricIcon}><Icon size={21} /></div><div><span>{t(`nav.${key === 'model_routes' ? 'routes' : key === 'client_keys' ? 'keys' : key === 'requests' ? 'usage' : key}`)}</span><strong>{dashboard.counts[key] || 0}</strong></div></Panel>)}
     </div>
     <div className={styles.twoColumns}>
       <Panel>

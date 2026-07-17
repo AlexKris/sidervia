@@ -176,15 +176,7 @@ func RotateKey(ctx context.Context, database *store.Store, oldCipher, newCipher 
 		return RotationReport{}, err
 	}
 	defer tx.Rollback()
-	columns := []encryptedColumn{
-		{Table: "admin_user", IDColumn: "id", Column: "totp_secret_enc"},
-		{Table: "admin_user", IDColumn: "id", Column: "totp_pending_secret_enc"},
-		{Table: "admin_sessions", IDColumn: "public_id", Column: "csrf_token_enc"},
-		{Table: "egress_proxies", IDColumn: "public_id", Column: "username_enc"},
-		{Table: "egress_proxies", IDColumn: "public_id", Column: "password_enc"},
-		{Table: "accounts", IDColumn: "public_id", Column: "credential_enc"},
-		{Table: "crypto_sentinel", IDColumn: "id", Column: "ciphertext"},
-	}
+	columns := encryptedColumns(store.LatestSchemaVersion)
 	rotated := 0
 	for _, column := range columns {
 		count, err := rotateColumn(ctx, tx, oldCipher, newCipher, column)
@@ -269,15 +261,7 @@ func verifyDatabase(ctx context.Context, path string, cipher *cryptox.Cipher) (v
 	if version > store.LatestSchemaVersion || version < 1 {
 		return verifyResult{}, fmt.Errorf("unsupported backup schema version %d", version)
 	}
-	columns := []encryptedColumn{
-		{Table: "admin_user", IDColumn: "id", Column: "totp_secret_enc"},
-		{Table: "admin_user", IDColumn: "id", Column: "totp_pending_secret_enc"},
-		{Table: "admin_sessions", IDColumn: "public_id", Column: "csrf_token_enc"},
-		{Table: "egress_proxies", IDColumn: "public_id", Column: "username_enc"},
-		{Table: "egress_proxies", IDColumn: "public_id", Column: "password_enc"},
-		{Table: "accounts", IDColumn: "public_id", Column: "credential_enc"},
-		{Table: "crypto_sentinel", IDColumn: "id", Column: "ciphertext"},
-	}
+	columns := encryptedColumns(version)
 	count := 0
 	for _, column := range columns {
 		verified, err := verifyColumn(ctx, database.DB(), cipher, column)
@@ -293,6 +277,25 @@ type encryptedColumn struct {
 	Table    string
 	IDColumn string
 	Column   string
+}
+
+func encryptedColumns(schemaVersion int) []encryptedColumn {
+	columns := []encryptedColumn{
+		{Table: "admin_user", IDColumn: "id", Column: "totp_secret_enc"},
+		{Table: "admin_user", IDColumn: "id", Column: "totp_pending_secret_enc"},
+		{Table: "admin_sessions", IDColumn: "public_id", Column: "csrf_token_enc"},
+		{Table: "egress_proxies", IDColumn: "public_id", Column: "username_enc"},
+		{Table: "egress_proxies", IDColumn: "public_id", Column: "password_enc"},
+		{Table: "accounts", IDColumn: "public_id", Column: "credential_enc"},
+	}
+	if schemaVersion >= 2 {
+		columns = append(columns,
+			encryptedColumn{Table: "provider_oauth_configs", IDColumn: "public_id", Column: "client_secret_enc"},
+			encryptedColumn{Table: "oauth_attempts", IDColumn: "public_id", Column: "pkce_verifier_enc"},
+			encryptedColumn{Table: "oauth_attempts", IDColumn: "public_id", Column: "provider_payload_enc"},
+		)
+	}
+	return append(columns, encryptedColumn{Table: "crypto_sentinel", IDColumn: "id", Column: "ciphertext"})
 }
 
 type encryptedRow struct {

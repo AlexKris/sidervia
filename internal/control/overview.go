@@ -8,7 +8,7 @@ import (
 )
 
 func (s *Service) Dashboard(ctx context.Context) (Dashboard, error) {
-	result := Dashboard{DatabaseReady: true, Counts: make(map[string]int), Warnings: []string{"providers_not_implemented"}}
+	result := Dashboard{DatabaseReady: true, Counts: make(map[string]int)}
 	if err := s.db.PingContext(ctx); err != nil {
 		result.DatabaseReady = false
 		return result, err
@@ -21,7 +21,7 @@ func (s *Service) Dashboard(ctx context.Context) (Dashboard, error) {
 	}
 	for name, table := range map[string]string{
 		"proxies": "egress_proxies", "upstreams": "upstreams", "accounts": "accounts",
-		"model_routes": "model_routes", "client_keys": "client_keys",
+		"model_routes": "model_routes", "client_keys": "client_keys", "requests": "request_records",
 	} {
 		var count int
 		if err := s.db.QueryRowContext(ctx, "SELECT count(*) FROM "+table).Scan(&count); err != nil {

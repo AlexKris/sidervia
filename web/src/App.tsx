@@ -1,18 +1,21 @@
+import { lazy, Suspense } from 'react'
 import { Navigate, Route, Routes } from 'react-router-dom'
 import { useAuth } from './auth/AuthContext'
 import AppLayout from './components/AppLayout'
 import { LoadingState } from './components/ui'
-import LoginPage from './pages/LoginPage'
-import DashboardPage from './pages/DashboardPage'
-import ProxiesPage from './pages/ProxiesPage'
-import UpstreamsPage from './pages/UpstreamsPage'
-import AccountsPage from './pages/AccountsPage'
-import ModelRoutesPage from './pages/ModelRoutesPage'
-import ClientKeysPage from './pages/ClientKeysPage'
-import AuditPage from './pages/AuditPage'
-import SettingsPage from './pages/SettingsPage'
-import PlannedPage from './pages/PlannedPage'
 import styles from './App.module.css'
+
+const LoginPage = lazy(() => import('./pages/LoginPage'))
+const DashboardPage = lazy(() => import('./pages/DashboardPage'))
+const ProxiesPage = lazy(() => import('./pages/ProxiesPage'))
+const UpstreamsPage = lazy(() => import('./pages/UpstreamsPage'))
+const AccountsPage = lazy(() => import('./pages/AccountsPage'))
+const ModelRoutesPage = lazy(() => import('./pages/ModelRoutesPage'))
+const ClientKeysPage = lazy(() => import('./pages/ClientKeysPage'))
+const AuditPage = lazy(() => import('./pages/AuditPage'))
+const SettingsPage = lazy(() => import('./pages/SettingsPage'))
+const PlannedPage = lazy(() => import('./pages/PlannedPage'))
+const UsagePage = lazy(() => import('./pages/UsagePage'))
 
 function ProtectedLayout() {
   const { session, loading } = useAuth()
@@ -22,7 +25,7 @@ function ProtectedLayout() {
 }
 
 export default function App() {
-  return <Routes>
+  return <Suspense fallback={<div className={styles.centered}><LoadingState /></div>}><Routes>
     <Route path="/login" element={<LoginPage />} />
     <Route element={<ProtectedLayout />}>
       <Route index element={<DashboardPage />} />
@@ -31,11 +34,11 @@ export default function App() {
       <Route path="proxies" element={<ProxiesPage />} />
       <Route path="model-routes" element={<ModelRoutesPage />} />
       <Route path="client-keys" element={<ClientKeysPage />} />
-      <Route path="usage" element={<PlannedPage kind="usage" />} />
+      <Route path="usage" element={<UsagePage />} />
       <Route path="price-catalog" element={<PlannedPage kind="pricing" />} />
       <Route path="audit" element={<AuditPage />} />
       <Route path="settings" element={<SettingsPage />} />
     </Route>
     <Route path="*" element={<Navigate to="/" replace />} />
-  </Routes>
+  </Routes></Suspense>
 }

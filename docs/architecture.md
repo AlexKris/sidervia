@@ -140,7 +140,7 @@ Transport 只负责上游网络行为和 Provider 特有操作：
 - 官方错误、限流和 quota 信号标准化。
 - 认证验证、token refresh 和模型发现。
 
-每个账号的登录、刷新、探测和推理复用同一 Egress Profile，防止身份建立与实际调用来自不同出口。
+每个账号的服务端 token exchange、刷新、探测和推理复用同一 Egress Profile，防止服务端身份建立与实际调用来自不同出口。标准 OAuth 浏览器授权页是前台跳转，使用管理员浏览器自身网络，不声称经过 Sidervia 账号代理。
 
 ### 3.8 Resource Binding Registry
 

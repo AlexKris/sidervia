@@ -121,7 +121,7 @@ func (s *Store) Ready(ctx context.Context) error {
 	return nil
 }
 
-const LatestSchemaVersion = 1
+const LatestSchemaVersion = 3
 
 func (s *Store) SchemaVersion(ctx context.Context) (int, error) {
 	var version int

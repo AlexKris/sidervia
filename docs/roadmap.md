@@ -1,12 +1,12 @@
 # Sidervia 路线图
 
-- 状态：初始实施顺序
-- 版本：0.1
+- 状态：v0.2 实施中
+- 版本：0.2
 - 日期：2026-07-16
 
 路线图按可验证能力分阶段，不承诺日历日期。每个里程碑必须满足自身测试和安全门禁，不能以“后续补测试”作为完成条件。
 
-当前正在实施 v0.1；精确完成项和未实现边界见[实现状态](implementation-status.md)。
+v0.1 Foundation 已形成基线；当前正在收尾 v0.2。真实 Provider 互通、2C2G 容量和发布安全门禁尚未完成，精确边界见[实现状态](implementation-status.md)。
 
 ## v0.1 — Foundation
 
@@ -27,8 +27,8 @@
 目标：提供第一个可实际自托管的文本/流式版本，API Key 与 OAuth 同时可用。
 
 - OpenAI、Anthropic、Gemini、xAI 的 API Key 认证和原生文本/流式核心路径。
-- 官方公开且适用于服务端集成的 OAuth/device/WIF 流程；订阅产品适配器标 Beta。
-- 账号绑定 HTTP/HTTPS/SOCKS5 代理，登录到推理保持同一出口。
+- Google 官方 Authorization Code + S256 PKCE 流程标 Beta；其他 Provider 的 OAuth/device/WIF 只有在其公开文档明确允许服务端集成后才进入后续里程碑。
+- 账号绑定 HTTP/HTTPS/SOCKS5 代理，服务端 token exchange、刷新、验证到推理保持同一出口；浏览器 OAuth 前台边界明确提示。
 - Model Route、硬过滤、优先级、负载率、轮转、并发和冷却。
 - 401 单次刷新重试、token rotation、reauth_required。
 - 请求元数据、基础 usage、审计事件和 Dashboard。

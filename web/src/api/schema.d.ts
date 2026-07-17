@@ -148,6 +148,56 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/requests": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["listRequests"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/requests/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ResourceID"];
+            };
+            cookie?: never;
+        };
+        get: operations["getRequest"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/usage": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getUsageSummary"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/system/health": {
         parameters: {
             query?: never;
@@ -282,6 +332,92 @@ export interface paths {
         patch: operations["updateAccount"];
         trace?: never;
     };
+    "/accounts/{id}/validate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ResourceID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["validateAccount"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/oauth/providers/google": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["getGoogleOAuthConfig"];
+        put?: never;
+        post: operations["createGoogleOAuthConfig"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch: operations["updateGoogleOAuthConfig"];
+        trace?: never;
+    };
+    "/oauth-attempts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["createOAuthAttempt"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/oauth-attempts/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ResourceID"];
+            };
+            cookie?: never;
+        };
+        get: operations["getOAuthAttempt"];
+        put?: never;
+        post?: never;
+        delete: operations["cancelOAuthAttempt"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/oauth-attempts/{id}/callback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ResourceID"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["completeOAuthAttemptCallback"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/model-routes": {
         parameters: {
             query?: never;
@@ -410,6 +546,59 @@ export interface components {
             };
             warnings: string[];
         };
+        RequestRecord: {
+            id: string;
+            client_key_id: string;
+            client_key_name: string;
+            protocol: string;
+            endpoint_kind: string;
+            public_model_id: string;
+            provider_id?: string;
+            upstream_id?: string;
+            account_id?: string;
+            status_code: number;
+            error_code?: string;
+            streamed: boolean;
+            /** Format: date-time */
+            started_at: string;
+            /** Format: date-time */
+            first_byte_at?: string;
+            /** Format: date-time */
+            completed_at: string;
+            /** Format: int64 */
+            duration_ms: number;
+            /** Format: int64 */
+            ttft_ms?: number;
+            /** Format: int64 */
+            request_bytes: number;
+            /** Format: int64 */
+            response_bytes: number;
+            usage: {
+                [key: string]: number;
+            };
+        };
+        RequestRecordPage: {
+            items: components["schemas"]["RequestRecord"][];
+            next_cursor?: string;
+        };
+        UsageSummary: {
+            /** Format: date-time */
+            window_start: string;
+            /** Format: int64 */
+            requests: number;
+            /** Format: int64 */
+            errors: number;
+            /** Format: int64 */
+            streamed: number;
+            /** Format: int64 */
+            input_tokens: number;
+            /** Format: int64 */
+            output_tokens: number;
+            /** Format: int64 */
+            cache_read_tokens: number;
+            /** Format: int64 */
+            reasoning_tokens: number;
+        };
         BuildInfo: {
             version: string;
             commit: string;
@@ -465,6 +654,7 @@ export interface components {
             enabled: boolean;
         };
         UpstreamRequest: {
+            /** @description Immutable after creation; updates must retain the existing Provider ID. */
             provider_id: string;
             name: string;
             /** Format: uri */
@@ -477,7 +667,7 @@ export interface components {
             upstream_id: string;
             name: string;
             /** @enum {string} */
-            auth_kind: "api_key";
+            auth_kind: "api_key" | "oauth";
             /** @enum {string} */
             billing_kind: "subscription" | "metered" | "custom";
             credential_configured: boolean;
@@ -485,29 +675,95 @@ export interface components {
             credential_expires_at?: string;
             proxy_id?: string;
             /** @enum {string} */
-            status: "draft" | "disabled";
+            status: "draft" | "validating" | "active" | "invalid" | "reauth_required" | "disabled";
             priority: number;
             max_concurrency: number;
         };
         AccountRequest: {
             upstream_id: string;
             name: string;
-            /** Format: password */
+            /** @enum {string} */
+            auth_kind: "api_key" | "oauth";
+            /**
+             * Format: password
+             * @description Required when creating an api_key account; omitted for OAuth accounts and to retain an existing API key during update.
+             */
             credential?: string;
             /** Format: date-time */
             credential_expires_at?: string;
             proxy_id?: string;
             /** @enum {string} */
             billing_kind: "subscription" | "metered" | "custom";
-            /** @enum {string} */
-            status: "draft" | "disabled";
+            /**
+             * @description Creation accepts draft or disabled. Updates may retain active only when an already active account keeps the same credential and egress; validation is the only activation path.
+             * @enum {string}
+             */
+            status: "draft" | "active" | "disabled";
             priority?: number;
             max_concurrency?: number;
+        };
+        GoogleOAuthConfig: components["schemas"]["MutableResource"] & {
+            /** @enum {string} */
+            provider_id: "google";
+            client_id: string;
+            client_secret_configured: boolean;
+            project_id: string;
+            scopes: string[];
+            /** Format: uri */
+            redirect_uri: string;
+            enabled: boolean;
+            beta: boolean;
+        };
+        GoogleOAuthConfigCreateRequest: {
+            client_id: string;
+            /** Format: password */
+            client_secret: string;
+            project_id: string;
+            enabled: boolean;
+        };
+        GoogleOAuthConfigUpdateRequest: {
+            client_id: string;
+            /**
+             * Format: password
+             * @description Omit to retain the currently configured client secret.
+             */
+            client_secret?: string;
+            project_id: string;
+            enabled: boolean;
+        };
+        OAuthAttemptRequest: {
+            account_id: string;
+        };
+        OAuthCallbackRequest: {
+            /** Format: uri */
+            callback_url: string;
+        };
+        OAuthAttempt: {
+            id: string;
+            /** @enum {string} */
+            provider_id: "google";
+            account_id: string;
+            /** @enum {string} */
+            flow_kind: "authorization_code_pkce";
+            /** @enum {string} */
+            status: "pending" | "exchanging" | "consumed" | "failed" | "cancelled";
+            /** Format: uri */
+            authorization_url?: string;
+            /** Format: date-time */
+            expires_at: string;
+            /** Format: date-time */
+            created_at: string;
+            beta: boolean;
+        };
+        OAuthCompletion: {
+            attempt_id: string;
+            account: components["schemas"]["Account"];
         };
         RouteCandidate: {
             account_id: string;
             upstream_model_id: string;
             enabled: boolean;
+            /** @description Must match the selected account Provider; xAI accounts accept xai or openai compatibility protocol. */
             protocols: ("openai" | "anthropic" | "gemini" | "xai")[];
             capabilities: string[];
         };
@@ -629,6 +885,16 @@ export interface components {
             };
             content: {
                 "application/json": components["schemas"]["Account"];
+            };
+        };
+        /** @description Google OAuth configuration without client secret material */
+        GoogleOAuthConfig: {
+            headers: {
+                ETag: components["headers"]["ETag"];
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["GoogleOAuthConfig"];
             };
         };
         /** @description Model route resource */
@@ -910,6 +1176,74 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Dashboard"];
+                };
+            };
+            default: components["responses"]["Error"];
+        };
+    };
+    listRequests: {
+        parameters: {
+            query?: {
+                limit?: components["parameters"]["Limit"];
+                cursor?: components["parameters"]["Cursor"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Body-free request metadata page */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RequestRecordPage"];
+                };
+            };
+            default: components["responses"]["Error"];
+        };
+    };
+    getRequest: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ResourceID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Body-free request metadata */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RequestRecord"];
+                };
+            };
+            default: components["responses"]["Error"];
+        };
+    };
+    getUsageSummary: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Basic usage summary for the trailing 24 hours */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UsageSummary"];
                 };
             };
             default: components["responses"]["Error"];
@@ -1245,6 +1579,178 @@ export interface operations {
         requestBody: components["requestBodies"]["Account"];
         responses: {
             200: components["responses"]["Account"];
+            default: components["responses"]["Error"];
+        };
+    };
+    validateAccount: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-CSRF-Token": components["parameters"]["CSRF"];
+                "If-Match": components["parameters"]["IfMatch"];
+            };
+            path: {
+                id: components["parameters"]["ResourceID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["Account"];
+            default: components["responses"]["Error"];
+        };
+    };
+    getGoogleOAuthConfig: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: components["responses"]["GoogleOAuthConfig"];
+            default: components["responses"]["Error"];
+        };
+    };
+    createGoogleOAuthConfig: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-CSRF-Token": components["parameters"]["CSRF"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GoogleOAuthConfigCreateRequest"];
+            };
+        };
+        responses: {
+            201: components["responses"]["GoogleOAuthConfig"];
+            default: components["responses"]["Error"];
+        };
+    };
+    updateGoogleOAuthConfig: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-CSRF-Token": components["parameters"]["CSRF"];
+                "If-Match": components["parameters"]["IfMatch"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GoogleOAuthConfigUpdateRequest"];
+            };
+        };
+        responses: {
+            200: components["responses"]["GoogleOAuthConfig"];
+            default: components["responses"]["Error"];
+        };
+    };
+    createOAuthAttempt: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-CSRF-Token": components["parameters"]["CSRF"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OAuthAttemptRequest"];
+            };
+        };
+        responses: {
+            /** @description OAuth authorization attempt */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OAuthAttempt"];
+                };
+            };
+            default: components["responses"]["Error"];
+        };
+    };
+    getOAuthAttempt: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ResourceID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OAuth authorization attempt status */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OAuthAttempt"];
+                };
+            };
+            default: components["responses"]["Error"];
+        };
+    };
+    cancelOAuthAttempt: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-CSRF-Token": components["parameters"]["CSRF"];
+            };
+            path: {
+                id: components["parameters"]["ResourceID"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Cancelled */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            default: components["responses"]["Error"];
+        };
+    };
+    completeOAuthAttemptCallback: {
+        parameters: {
+            query?: never;
+            header: {
+                "X-CSRF-Token": components["parameters"]["CSRF"];
+            };
+            path: {
+                id: components["parameters"]["ResourceID"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OAuthCallbackRequest"];
+            };
+        };
+        responses: {
+            /** @description Completed OAuth account */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OAuthCompletion"];
+                };
+            };
             default: components["responses"]["Error"];
         };
     };

@@ -1,17 +1,17 @@
 # Sidervia 部署与运维设计
 
-- 状态：生产部署基线
-- 版本：0.1
+- 状态：v0.2 开发部署基线
+- 版本：0.2
 - 日期：2026-07-17
 
-> 当前仓库处于 v0.1 Foundation，尚无生产发行镜像，也不具备真实 Provider 转发。本文是最终单机版本的部署基线；当前可验证范围见[实现状态](implementation-status.md)。
+> 当前仓库已实现 v0.2 原生文本/流式开发路径，但尚无生产发行镜像，也未完成真实 Provider、2C2G 容量和独立安全验收。本文是单机部署基线，不是生产就绪声明；当前证据见[实现状态](implementation-status.md)。
 
 ## 1. 推荐结论
 
 不超过 5 个下游用户、文件和媒体仅流式转发时：
 
-- **2 vCPU / 2 GiB RAM / 40 GiB SSD**：可用基线。
-- **2 vCPU / 4 GiB RAM / 40 GiB SSD**：更适合较多并发流、Realtime/Live、批处理管理或偶尔在服务器执行诊断。
+- **2 vCPU / 2 GiB RAM / 40 GiB SSD**：设计目标，仍需受限环境容量验收。
+- **2 vCPU / 4 GiB RAM / 40 GiB SSD**：v0.2 容量验收完成前的推荐配置，也适合较多并发流或偶尔在服务器执行诊断。
 - 不需要 PostgreSQL、Redis、消息队列或独立 Node 服务。
 - 生产 VPS 拉取 GitHub Container Registry 的预构建镜像，不在 VPS 构建 Go/React。
 
@@ -73,9 +73,11 @@ SQLite + WAL on local persistent SSD
 
 在 1,000 请求/日量级，365 天不含正文的明细通常远低于该预算；在 10,000 请求/日以上必须根据真实行大小重新估算，不能继续假设 40 GiB 足够。
 
+Sidervia 每日把满 365 天的请求明细先累加到永久基础日聚合，再与审计事件同事务删除；任务失败会保留原明细并写错误日志，部署者应监控 `request.retention_failed`。
+
 ### 3.3 带宽
 
-文本流量通常较小，图片/音频/视频和文件转发会双向消耗 VPS 带宽。因为 Sidervia 不长期归档媒体，磁盘压力受控，但出口流量和并发连接仍应纳入 VPS 套餐。
+v0.2 只有文本流量，通常较小。后续图片/音频/视频和文件转发会双向消耗 VPS 带宽；Sidervia 不计划长期归档媒体，但出口流量和并发连接仍需纳入 VPS 套餐。
 
 ## 4. 镜像与版本
 
@@ -156,6 +158,7 @@ docker compose config --quiet
 - 反向代理必须支持 SSE flush 和 WebSocket Upgrade，不应缓存公开 API/管理响应。
 - 请求体上限应与 Sidervia 接口限制一致；反向代理更小的限制会先返回 413，这是可接受行为。
 - 管理页面设置 HSTS、CSP、frame-ancestors 等 Header 时由 Sidervia 和入口协调，避免互相覆盖成更弱配置。
+- 反向代理访问日志不得记录 `/oauth/callback/google` 的原始 query；其中包含一次性 OAuth code 和 state。Sidervia 自身只记录路由模板，不记录 query。
 
 如果管理页面不需要公网访问，优先通过 WireGuard/Tailscale/SSH tunnel 访问，而不是仅依赖隐藏路径。
 
@@ -171,7 +174,7 @@ docker compose config --quiet
 
 - 允许所配置 Provider、OAuth IdP、DNS、时间同步和必要代理。
 - 企业防火墙可做域名 allowlist，但应用内 SSRF 校验仍必须保留。
-- 使用账号代理时，登录、刷新、quota 和推理都通过同一代理；不要只代理推理请求。
+- 使用账号代理时，服务端 token exchange、刷新、验证和推理都通过同一代理；浏览器打开 IdP 授权页时使用管理员浏览器网络，不经过 Sidervia 代理。
 
 ## 9. 首次部署
 
@@ -181,7 +184,7 @@ docker compose config --quiet
 4. 启动 Sidervia，检查容器健康和 `/readyz`。
 5. 登录管理页面，立即启用 TOTP。
 6. 删除 bootstrap password 文件与 Compose 挂载，重建容器并再次登录。
-7. v0.2 及以后添加测试 Provider/Account/Client Key，执行非流式和 SSE 请求；v0.1 只验证控制面与明确的 501 响应。
+7. 添加测试 Provider、API Key/OAuth Account、Model Route 和 Client Key，分别执行非流式与 SSE 请求；在正式发布前只使用授权的测试凭据。
 8. 创建首份一致性备份，复制到异机并执行恢复验证。
 9. 配置日志轮转、磁盘/内存/证书/备份告警。
 

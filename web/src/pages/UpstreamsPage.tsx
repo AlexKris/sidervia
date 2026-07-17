@@ -22,7 +22,7 @@ export default function UpstreamsPage() {
   const update = useMutation({ mutationFn: ({ item, enabled }: { item: Upstream; enabled: boolean }) => api<Upstream>(`/upstreams/${item.id}`, { method: 'PATCH', version: item.version, body: upstreamBody(item, enabled) }), onSuccess: refresh })
   const remove = useMutation({ mutationFn: (item: Upstream) => api<void>(`/upstreams/${item.id}`, { method: 'DELETE', version: item.version }), onSuccess: refresh })
   const error = query.error || create.error || update.error || remove.error
-  const providerName = (id: string) => providers.data?.items.find((provider) => provider.id === id)?.name || id
+  const providerDescriptor = (id: string) => providers.data?.items.find((provider) => provider.id === id)
 
   const submit = (event: FormEvent) => { event.preventDefault(); create.mutate(form) }
   return <>
@@ -34,7 +34,7 @@ export default function UpstreamsPage() {
         <thead><tr><th>{t('common.name')}</th><th>{t('upstreams.provider')}</th><th>{t('upstreams.baseUrl')}</th><th>{t('upstreams.proxy')}</th><th>{t('common.status')}</th><th>{t('common.createdAt')}</th><th className={styles.actionCell}>{t('common.actions')}</th></tr></thead>
         <tbody>{query.data.items.map((item) => <tr key={item.id}>
           <td><strong>{item.name}</strong>{item.allow_private_network && <small className={styles.warningText}>{t('upstreams.private')}</small>}</td>
-          <td>{providerName(item.provider_id)} <StatusBadge value={t('common.planned')} tone="warn" /></td>
+          <td>{providerDescriptor(item.provider_id)?.name || item.provider_id} <StatusBadge value={providerDescriptor(item.provider_id)?.implementation_status === 'beta' ? t('common.beta') : t('common.planned')} tone="warn" /></td>
           <td><code className={styles.breakCode}>{item.base_url}</code></td>
           <td>{proxies.data?.items.find((proxy) => proxy.id === item.default_proxy_id)?.name || t('upstreams.noProxy')}</td>
           <td><StatusBadge value={item.enabled ? t('common.active') : t('common.disabled')} tone={item.enabled ? 'good' : 'neutral'} /></td>
@@ -47,7 +47,7 @@ export default function UpstreamsPage() {
       <form className={styles.form} onSubmit={submit}>
         {create.error && <ErrorPanel message={formatAPIError(create.error, t)} />}
         <div className={styles.formGrid}>
-          <Field label={t('upstreams.provider')}><Select value={form.provider_id} onChange={(event) => setForm({ ...form, provider_id: event.target.value })}>{(providers.data?.items || []).map((provider) => <option value={provider.id} key={provider.id}>{provider.name}</option>)}</Select></Field>
+          <Field label={t('upstreams.provider')}><Select value={form.provider_id} onChange={(event) => setForm({ ...form, provider_id: event.target.value })}>{(providers.data?.items || []).filter((provider) => provider.implementation_status !== 'planned').map((provider) => <option value={provider.id} key={provider.id}>{provider.name}</option>)}</Select></Field>
           <Field label={t('common.name')}><Input required maxLength={100} value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} /></Field>
           <Field label={t('upstreams.baseUrl')}><Input required type="url" value={form.base_url} onChange={(event) => setForm({ ...form, base_url: event.target.value })} /></Field>
           <Field label={t('upstreams.proxy')}><Select value={form.default_proxy_id || ''} onChange={(event) => setForm({ ...form, default_proxy_id: event.target.value || undefined })}><option value="">{t('upstreams.noProxy')}</option>{(proxies.data?.items || []).map((proxy) => <option value={proxy.id} key={proxy.id}>{proxy.name}</option>)}</Select></Field>

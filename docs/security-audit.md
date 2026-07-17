@@ -162,6 +162,7 @@ Release：
 - Session fixation、登录后 token 轮换、过期、idle/absolute timeout、密码修改后吊销。
 - Cookie 的 Secure/HttpOnly/SameSite/Path；生产 HTTP 启动应失败。
 - CSRF：缺失/错误/其他 Session token、跨 Origin、simple form、JSON text/plain。
+- 登录和手工 OAuth callback `POST` 的缺失/错误 Origin 必须失败；IdP 的公开 callback `GET` 在缺失或第三方 Origin/Referer 时仍进入 state/PKCE 校验，不能把第三方重定向误判为管理端 CSRF。
 - 刷新页面后 `/auth/session` 可恢复解密后的 CSRF token；数据库和备份中只能出现其密文。
 - CSP、frame-ancestors、MIME sniffing、缓存控制和敏感页面 back-forward cache。
 - 把 HTML/JS payload 放入 Provider 名、模型名、错误 message 和 audit metadata，验证无 XSS。
@@ -183,8 +184,9 @@ Release：
 - token endpoint 超时、5xx、非 JSON、超大 JSON、缺少 refresh token、refresh token rotation。
 - 100 个请求同时遇到过期 token，只允许一次 refresh；等待者收到同一新版本。
 - 401 在响应提交前只重试一次；提交一字节后绝不重试。
-- 登录、刷新、quota、推理的出口 IP/代理 identity 一致。
+- 服务端 token exchange、刷新、quota、验证和推理的出口 IP/代理 identity 一致；浏览器 authorization 明确使用管理员浏览器网络。
 - UI、Admin API、日志、trace 和数据库查询中不出现 code/token。
+- OAuth Provider 配置及 Attempt 的创建、更新、取消在审计写入失败时整体回滚，不能留下无审计的安全状态变更。
 
 ### 6.4 加密与数据库
 
@@ -220,6 +222,7 @@ Release：
 - WebSocket：超大 frame、fragment flood、压缩炸弹、无 pong、双向同时 close、binary/text 类型混淆。
 - 下游取消后 goroutine、连接、semaphore 和临时文件最终归零。
 - Native response 的未知 Provider JSON 字段/事件能安全保留；官方 Provider 的未知 request field、认证/逐跳 Header、下游客户端标识和网关私有字段不能穿透。
+- 已允许的采样、布尔和停止序列等控制项必须校验精确 JSON 类型；在标量位置嵌入对象/数组或把数字写成字符串时必须在出站前拒绝。
 - 先前响应的 HTTP status、stop reason、错误状态或客户端 metadata 不会被反射到后续上游请求；自定义兼容 Upstream 的字段 allowlist 不能越权放行认证和指纹字段。
 
 ### 6.7 调度与资源绑定
@@ -250,7 +253,8 @@ Release：
 - micro-USD 定点计算、边界舍入和聚合幂等。
 - 价格目录发布后不可修改；新版本不改变旧请求金额。
 - Audit metadata 拒绝任意 JSON/secret 字段；管理员删除对象后历史事件仍可读。
-- 365 天删除前聚合缺失时必须停止清理并告警。
+- 安全配置和 OAuth Attempt 的状态变更与对应 Audit event 必须同事务提交；注入审计写失败后两者都不存在或都保持旧值。
+- 365 天清理的日聚合、明细删除和审计必须同事务；usage 畸形、聚合溢出或审计失败时保留原明细并告警，重复运行不得重复累计。
 
 ## 7. 模糊测试与性质测试
 
@@ -352,6 +356,6 @@ final release decision
 
 ## 13. 当前实现覆盖
 
-v0.1 已落地管理认证、加密存储、严格 Admin JSON、控制面审计、备份和容器最小权限的首批控制与回归测试。Provider/OAuth、SSRF transport、协议转换、流式媒体、资源绑定和发布签名尚无实现，因此对应 T-05、T-06、T-09 至 T-15、部分 T-17/T-18 只能保持 planned，不能以“暂无发现”关闭。
+v0.2 已为 T-05/T-06/T-09/T-10 的首个范围落地 Google state+PKCE、token rotation/singleflight、账号固定出口、DNS/IP SSRF 复核、请求字段递归允许列表、下游标识剥离、有界 SSE，以及请求明细的事务化日聚合/365 天清理；OAuth 新增密文也已进入备份验证与主密钥轮换。上述控制已有自动化回归，但尚未完成真实 Provider 互通、代理身份外部观测、长时间故障注入和独立二次审计，因此仍不能以“暂无发现”关闭完整威胁项。Canonical IR、资源绑定、媒体/WebSocket、价格和发布签名对应范围继续保持 planned。
 
 逐项代码与证据索引见[实现状态](implementation-status.md)。正式发布仍必须满足第 10 节全部门禁。

@@ -26,7 +26,7 @@ func TestVersionWithoutConfiguration(t *testing.T) {
 	if err := run([]string{"version"}, &output, io.Discard); err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(output.String(), `"schema_max": 1`) {
+	if !strings.Contains(output.String(), `"schema_max": 3`) {
 		t.Fatalf("unexpected version output: %s", output.String())
 	}
 }

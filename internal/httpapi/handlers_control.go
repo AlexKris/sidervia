@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/AlexKris/sidervia/internal/accountvalidate"
 	"github.com/AlexKris/sidervia/internal/control"
 )
 
@@ -35,6 +36,7 @@ type upstreamRequest struct {
 type accountRequest struct {
 	UpstreamID          string     `json:"upstream_id"`
 	Name                string     `json:"name"`
+	AuthKind            string     `json:"auth_kind,omitempty"`
 	Credential          *string    `json:"credential,omitempty"`
 	CredentialExpiresAt *time.Time `json:"credential_expires_at,omitempty"`
 	ProxyID             *string    `json:"proxy_id,omitempty"`
@@ -85,6 +87,7 @@ func (s *Server) registerAccountRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/admin/v1/accounts/{id}", s.handleGetAccount)
 	mux.HandleFunc("PATCH /api/admin/v1/accounts/{id}", s.handleUpdateAccount)
 	mux.HandleFunc("DELETE /api/admin/v1/accounts/{id}", s.handleDeleteAccount)
+	mux.HandleFunc("POST /api/admin/v1/accounts/{id}/validate", s.handleValidateAccount)
 }
 
 func (s *Server) registerModelRouteRoutes(mux *http.ServeMux) {
@@ -116,7 +119,7 @@ func (s *Server) handleReady(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleCapabilityUnavailable(w http.ResponseWriter, r *http.Request) {
-	writeError(w, r, http.StatusNotImplemented, "capability_not_supported", "provider protocol execution is not implemented in this release", nil)
+	writeError(w, r, http.StatusNotImplemented, "capability_not_supported", "requested provider capability is not implemented in this release", nil)
 }
 
 func (s *Server) handleAPINotFound(w http.ResponseWriter, r *http.Request) {
@@ -364,6 +367,32 @@ func (s *Server) handleDeleteAccount(w http.ResponseWriter, r *http.Request) {
 	writeNoContent(w)
 }
 
+func (s *Server) handleValidateAccount(w http.ResponseWriter, r *http.Request) {
+	if s.accountValidate == nil {
+		writeError(w, r, http.StatusNotImplemented, "capability_not_supported", "account validation is not available", nil)
+		return
+	}
+	version, ok := s.requireVersion(w, r)
+	if !ok {
+		return
+	}
+	item, err := s.accountValidate.Validate(r.Context(), actor(r), r.PathValue("id"), version)
+	if err != nil {
+		if code, validation := accountvalidate.IsValidationError(err); validation {
+			status := http.StatusBadGateway
+			if code == "oauth_authorization_required" || code == "account_disabled" {
+				status = http.StatusUnprocessableEntity
+			}
+			writeError(w, r, status, "account_validation_failed", "account validation failed", map[string]any{"reason": code})
+			return
+		}
+		s.writeServiceError(w, r, err)
+		return
+	}
+	setETag(w, item.Version)
+	writeJSON(w, http.StatusOK, item)
+}
+
 func (s *Server) handleListModelRoutes(w http.ResponseWriter, r *http.Request) {
 	limit, cursor, err := pagination(r)
 	if err != nil {
@@ -573,7 +602,7 @@ func (body upstreamRequest) upstreamInput() control.UpstreamInput {
 
 func (body accountRequest) accountInput() control.AccountInput {
 	return control.AccountInput{
-		UpstreamID: body.UpstreamID, Name: body.Name, Credential: body.Credential,
+		UpstreamID: body.UpstreamID, Name: body.Name, AuthKind: body.AuthKind, Credential: body.Credential,
 		CredentialExpiresAt: body.CredentialExpiresAt, ProxyID: body.ProxyID, BillingKind: body.BillingKind,
 		Status: body.Status, Priority: body.Priority, MaxConcurrency: body.MaxConcurrency,
 	}

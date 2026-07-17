@@ -30,10 +30,10 @@ func NewService(db *sql.DB, cipher *cryptox.Cipher, c clock.Clock, ids identifie
 
 func (s *Service) Providers() []Provider {
 	return []Provider{
-		{ID: "openai", Name: "OpenAI / Codex", AuthMethods: []string{"api_key"}, Capabilities: []string{}, ImplementationStatus: "planned"},
-		{ID: "anthropic", Name: "Anthropic / Claude", AuthMethods: []string{"api_key"}, Capabilities: []string{}, ImplementationStatus: "planned"},
-		{ID: "google", Name: "Google / Gemini", AuthMethods: []string{"api_key"}, Capabilities: []string{}, ImplementationStatus: "planned"},
-		{ID: "xai", Name: "xAI / Grok", AuthMethods: []string{"api_key"}, Capabilities: []string{}, ImplementationStatus: "planned"},
+		{ID: "openai", Name: "OpenAI", AuthMethods: []string{"api_key"}, Capabilities: []string{"text", "stream"}, ImplementationStatus: "beta"},
+		{ID: "anthropic", Name: "Anthropic", AuthMethods: []string{"api_key"}, Capabilities: []string{"text", "stream"}, ImplementationStatus: "beta"},
+		{ID: "google", Name: "Google Gemini", AuthMethods: []string{"api_key", "oauth_beta"}, Capabilities: []string{"text", "stream"}, ImplementationStatus: "beta"},
+		{ID: "xai", Name: "xAI", AuthMethods: []string{"api_key"}, Capabilities: []string{"text", "stream"}, ImplementationStatus: "beta"},
 		{ID: "openai-compatible", Name: "OpenAI-compatible", AuthMethods: []string{"api_key"}, Capabilities: []string{}, ImplementationStatus: "planned"},
 	}
 }
@@ -52,18 +52,25 @@ func (s *Service) audit(ctx context.Context, tx *sql.Tx, actor Actor, eventType,
 }
 
 func (s *Service) RecordAudit(ctx context.Context, actor Actor, eventType, targetKind, targetID, outcome string, metadata map[string]any) error {
-	if outcome != "success" && outcome != "failure" {
-		return errors.New("invalid audit outcome")
-	}
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
 	}
 	defer tx.Rollback()
-	if err := s.auditOutcome(ctx, tx, actor, eventType, targetKind, targetID, outcome, metadata); err != nil {
+	if err := s.RecordAuditTx(ctx, tx, actor, eventType, targetKind, targetID, outcome, metadata); err != nil {
 		return err
 	}
 	return tx.Commit()
+}
+
+func (s *Service) RecordAuditTx(ctx context.Context, tx *sql.Tx, actor Actor, eventType, targetKind, targetID, outcome string, metadata map[string]any) error {
+	if tx == nil {
+		return errors.New("audit transaction is required")
+	}
+	if outcome != "success" && outcome != "failure" {
+		return errors.New("invalid audit outcome")
+	}
+	return s.auditOutcome(ctx, tx, actor, eventType, targetKind, targetID, outcome, metadata)
 }
 
 func (s *Service) auditOutcome(ctx context.Context, tx *sql.Tx, actor Actor, eventType, targetKind, targetID, outcome string, metadata map[string]any) error {

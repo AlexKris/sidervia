@@ -1,6 +1,6 @@
 # Sidervia 直接依赖审查
 
-- 状态：v0.1 初始记录
+- 状态：v0.2 复核记录
 - 核对日期：2026-07-17
 - 锁文件：[`go.sum`](../go.sum)、[`web/pnpm-lock.yaml`](../web/pnpm-lock.yaml)
 

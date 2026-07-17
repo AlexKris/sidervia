@@ -80,6 +80,7 @@ type Account struct {
 type AccountInput struct {
 	UpstreamID          string
 	Name                string
+	AuthKind            string
 	Credential          *string
 	CredentialExpiresAt *time.Time
 	ProxyID             *string
@@ -87,6 +88,12 @@ type AccountInput struct {
 	Status              string
 	Priority            *int
 	MaxConcurrency      *int
+}
+
+type AccountValidation struct {
+	Identity          map[string]any
+	CapabilityVersion string
+	Models            []string
 }
 
 type RouteCandidate struct {

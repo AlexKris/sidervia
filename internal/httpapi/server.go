@@ -1,23 +1,39 @@
 package httpapi
 
 import (
+	"context"
 	"log/slog"
 	"net/http"
 	"net/netip"
 	"net/url"
 	"sync/atomic"
 
+	"github.com/AlexKris/sidervia/internal/accountvalidate"
 	"github.com/AlexKris/sidervia/internal/auth"
 	"github.com/AlexKris/sidervia/internal/buildinfo"
+	"github.com/AlexKris/sidervia/internal/clientauth"
 	"github.com/AlexKris/sidervia/internal/control"
+	"github.com/AlexKris/sidervia/internal/gateway"
 	"github.com/AlexKris/sidervia/internal/identifier"
 	"github.com/AlexKris/sidervia/internal/metrics"
+	"github.com/AlexKris/sidervia/internal/oauth"
+	"github.com/AlexKris/sidervia/internal/routing"
 	"github.com/AlexKris/sidervia/internal/store"
+	"github.com/AlexKris/sidervia/internal/usage"
 )
 
 type Server struct {
-	auth           *auth.Service
-	control        *control.Service
+	auth            *auth.Service
+	clientAuth      *clientauth.Service
+	control         *control.Service
+	accountValidate *accountvalidate.Service
+	gateway         *gateway.Service
+	routing         *routing.Service
+	oauth           *oauth.Service
+	usageReader     *usage.Reader
+	usageRecorder   interface {
+		Enqueue(context.Context, usage.Event) error
+	}
 	store          *store.Store
 	logger         *slog.Logger
 	ids            identifier.Generator
@@ -31,8 +47,17 @@ type Server struct {
 }
 
 type Options struct {
-	Auth           *auth.Service
-	Control        *control.Service
+	Auth            *auth.Service
+	ClientAuth      *clientauth.Service
+	Control         *control.Service
+	AccountValidate *accountvalidate.Service
+	Gateway         *gateway.Service
+	Routing         *routing.Service
+	OAuth           *oauth.Service
+	UsageReader     *usage.Reader
+	UsageRecorder   interface {
+		Enqueue(context.Context, usage.Event) error
+	}
 	Store          *store.Store
 	Logger         *slog.Logger
 	IDs            identifier.Generator
@@ -46,7 +71,10 @@ type Options struct {
 
 func New(options Options) *Server {
 	s := &Server{
-		auth: options.Auth, control: options.Control, store: options.Store, logger: options.Logger,
+		auth: options.Auth, clientAuth: options.ClientAuth, control: options.Control,
+		accountValidate: options.AccountValidate, gateway: options.Gateway, routing: options.Routing, oauth: options.OAuth,
+		usageReader: options.UsageReader, usageRecorder: options.UsageRecorder,
+		store: options.Store, logger: options.Logger,
 		ids: options.IDs, publicURL: options.PublicURL, trustedProxies: options.TrustedProxies,
 		secureCookie: options.SecureCookie, assets: options.Assets, build: options.Build, metrics: options.Metrics,
 	}
@@ -73,6 +101,10 @@ func (s *Server) Handler() http.Handler {
 	authenticated.HandleFunc("GET /api/admin/v1/dashboard", s.handleDashboard)
 	authenticated.HandleFunc("GET /api/admin/v1/system/health", s.handleSystemHealth)
 	authenticated.HandleFunc("GET /api/admin/v1/audit-events", s.handleAuditEvents)
+	authenticated.HandleFunc("GET /api/admin/v1/requests", s.handleRequests)
+	authenticated.HandleFunc("GET /api/admin/v1/requests/{id}", s.handleRequest)
+	authenticated.HandleFunc("GET /api/admin/v1/usage", s.handleUsageSummary)
+	s.registerOAuthRoutes(authenticated)
 	s.registerProxyRoutes(authenticated)
 	s.registerUpstreamRoutes(authenticated)
 	s.registerAccountRoutes(authenticated)
@@ -80,7 +112,13 @@ func (s *Server) Handler() http.Handler {
 	s.registerClientKeyRoutes(authenticated)
 	mux.Handle("/api/admin/", s.requireSession(authenticated))
 	mux.HandleFunc("/api/", s.handleAPINotFound)
+	mux.HandleFunc("GET /oauth/callback/google", s.handleGoogleOAuthCallback)
 
+	mux.HandleFunc("GET /v1/models", s.handleOpenAIModels)
+	mux.HandleFunc("POST /v1/chat/completions", s.handleChatCompletions)
+	mux.HandleFunc("POST /v1/messages", s.handleMessages)
+	mux.HandleFunc("GET /v1beta/models", s.handleGeminiModels)
+	mux.HandleFunc("POST /v1beta/models/{operation}", s.handleGeminiGenerate)
 	mux.HandleFunc("/v1", s.handleCapabilityUnavailable)
 	mux.HandleFunc("/v1/", s.handleCapabilityUnavailable)
 	mux.HandleFunc("/v1beta", s.handleCapabilityUnavailable)
